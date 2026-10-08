@@ -138,8 +138,14 @@
   .ultimo-paso b{font-family:var(--f-titulo);font-size:19px;color:#fff}
   .ultimo-paso p{margin:0;font-size:14px}
   a.enviar{text-decoration:none}
-  .apps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
-  @media (max-width:520px){.apps{grid-template-columns:1fr}}
+  .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;width:100%}
+  .aviso-app{background:#fff6dc;color:#7a5600;border-radius:10px;padding:10px 12px;font-size:13.5px}
+  .campo-copia{display:grid;grid-template-columns:70px 1fr auto;gap:8px;align-items:start;padding:8px 0;border-top:1px solid var(--linea)}
+  .campo-copia span{font-weight:700;color:var(--petroleo);font-size:13px;padding-top:4px}
+  .campo-copia code{font-family:var(--mono);font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;background:#fff;border-radius:6px;padding:4px 8px;user-select:all}
+  .campo-copia code.largo{max-height:160px;overflow:auto}
+  .campo-copia button{font:inherit;font-weight:700;font-size:13px;background:var(--petroleo);color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer}
+  @media (max-width:520px){.campo-copia{grid-template-columns:1fr auto}.campo-copia span{grid-column:1/-1}}
   .app{display:block;text-align:center;text-decoration:none;background:var(--turquesa);color:#063440;font-family:var(--f-titulo);font-weight:700;font-size:16px;padding:13px 10px;border-radius:12px}
   .app:hover{background:#3fd0e8}
   .app:focus-visible{outline:3px solid #fff;outline-offset:2px}
@@ -225,19 +231,18 @@
       </div>
       <div class="ultimo-paso">
         <b id="pasoTitulo">Último paso: envía el email</b>
-        <p id="pasoTexto">Elige con qué correo quieres enviarlo. Se abrirá con la solicitud ya escrita: solo tienes que pulsar «Enviar». Recibirás una copia en <span id="emailCopia"></span> como confirmación.</p>
-        <div class="apps">
-          <a class="app" id="abrirGmail" href="#" target="_blank" rel="noopener">Gmail</a>
-          <a class="app" id="abrirOutlook" href="#" target="_blank" rel="noopener">Outlook</a>
-          <a class="app" id="abrirMail" href="#">Otra app de correo</a>
-        </div>
+        <p>Se abrirá tu correo con los destinatarios, el asunto y la solicitud ya escritos: solo tienes que pulsar «Enviar». Recibirás una copia en <span id="emailCopia"></span> como confirmación.</p>
+        <div class="apps" id="apps"></div>
+        <p class="aviso-app" id="avisoApp" hidden>Parece que has abierto esta página dentro de otra app. Si el correo no se abre, ábrela en <b>Chrome</b> o <b>Safari</b> (menú ⋮ o ··· → «Abrir en el navegador»).</p>
       </div>
       <p id="resumen"></p>
-      <details class="manual">
-        <summary>¿No se ha abierto tu correo?</summary>
-        <p>Copia la solicitud y envíala desde tu email a <b class="sel" id="destinoTexto"></b></p>
-        <button type="button" class="anadir" id="copiarSolicitud"><span>⧉</span>Copiar solicitud</button> <span class="pista" id="copiado"></span>
-        <textarea id="textoSolicitud" readonly rows="10" aria-label="Texto de la solicitud"></textarea>
+      <details class="manual" id="manual">
+        <summary>¿No se rellena el email? Cópialo y pégalo en tu correo</summary>
+        <p>Abre un email nuevo en tu correo y copia cada parte en su sitio:</p>
+        <div class="campo-copia"><span>Para</span><code id="cpPara"></code><button type="button" data-copia="cpPara">Copiar</button></div>
+        <div class="campo-copia"><span>CC</span><code id="cpCC"></code><button type="button" data-copia="cpCC">Copiar</button></div>
+        <div class="campo-copia"><span>Asunto</span><code id="cpAsunto"></code><button type="button" data-copia="cpAsunto">Copiar</button></div>
+        <div class="campo-copia"><span>Mensaje</span><code id="cpMensaje" class="largo"></code><button type="button" data-copia="cpMensaje">Copiar</button></div>
       </details>
       <div class="aviso-prueba" id="avisoPrueba" hidden>Vista de prueba: no se ha abierto ningún correo.</div>
       <p style="margin-top:20px"><button type="button" class="anadir" id="otra"><span>+</span>Hacer otra solicitud</button></p>
@@ -503,43 +508,69 @@
     $('form').hidden = true;
     $('ref').textContent = codigo;
     $('emailCopia').textContent = datos.email;
-    $('destinoTexto').textContent = EMAILS_PARA.join(' y ') + (EMAILS_COPIA.length ? ', con copia a ' + EMAILS_COPIA.join(', ') : '');
     $('resumen').textContent = 'Recogida solicitada para el ' + fechaTexto + ', ' + textoHorarioLargo(datos.franja) + '.';
-    $('textoSolicitud').value = 'Asunto: ' + asunto + '\n\n' + cuerpo.replace(/\r\n/g, '\n');
-    $('abrirMail').href = mailto;
-    // Gmail y Outlook: se abren en su app (móvil) o en la web (ordenador) con todo escrito
-    $('abrirGmail').href = 'https://mail.google.com/mail/?view=cm&fs=1' +
-      '&to=' + encodeURIComponent(EMAILS_PARA.join(',')) +
-      '&cc=' + encodeURIComponent(copias) +
-      '&su=' + encodeURIComponent(asunto) +
-      '&body=' + encodeURIComponent(cuerpo);
-    $('abrirOutlook').href = 'https://outlook.office.com/mail/deeplink/compose' +
-      '?to=' + encodeURIComponent(EMAILS_PARA.join(',')) +
-      '&cc=' + encodeURIComponent(copias) +
-      '&subject=' + encodeURIComponent(asunto) +
-      '&body=' + encodeURIComponent(cuerpo);
+    var para = EMAILS_PARA.join(',');
+    var enc = encodeURIComponent;
+    var ua = navigator.userAgent || '';
+    var esIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var esAndroid = /Android/i.test(ua);
+    var esMovil = esIOS || esAndroid;
+    var enOtraApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|LinkedInApp|Teams|Outlook|; wv\)|GSA\//i.test(ua);
+
+    var opciones = [];
+    if (esIOS) {
+      // Esquemas propios de cada app: rellenan Para, CC, Asunto y Mensaje
+      opciones.push(['Gmail', 'googlegmail://co?to=' + enc(para) + '&cc=' + enc(copias) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Outlook', 'ms-outlook://compose?to=' + enc(para) + '&cc=' + enc(copias) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Mail u otra app', mailto]);
+    } else if (esAndroid) {
+      // Android: el enlace estándar abre el selector (Gmail, Outlook…) con todo relleno
+      opciones.push(['Abrir mi correo (Gmail, Outlook…)', mailto]);
+    } else {
+      opciones.push(['Gmail', 'https://mail.google.com/mail/?view=cm&fs=1&to=' + enc(para) + '&cc=' + enc(copias) + '&su=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Outlook', 'https://outlook.office.com/mail/deeplink/compose?to=' + enc(para) + '&cc=' + enc(copias) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Programa de correo', mailto]);
+    }
+    $('apps').innerHTML = '';
+    opciones.forEach(function (o) {
+      var a = document.createElement('a');
+      a.className = 'app'; a.textContent = o[0]; a.href = o[1];
+      if (/^https:/.test(o[1])) { a.target = '_blank'; a.rel = 'noopener'; }
+      $('apps').appendChild(a);
+    });
+    $('avisoApp').hidden = !enOtraApp;
+
+    // Partes para copiar a mano
+    $('cpPara').textContent = EMAILS_PARA.join(', ');
+    $('cpCC').textContent = copias.split(',').join(', ');
+    $('cpAsunto').textContent = asunto;
+    $('cpMensaje').textContent = cuerpo.replace(/\r\n/g, '\n');
     $('avisoPrueba').hidden = !MODO_PRUEBA;
     $('exito').hidden = false;
     window.scrollTo(0, 0);
 
-    // En ordenador se abre directamente el programa de correo; en el móvil la clínica elige la app
-    var esMovil = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-    $('pasoTitulo').textContent = esMovil ? 'Último paso: elige tu correo y envía' : 'Último paso: pulsa «Enviar» en tu correo';
-    if (!MODO_PRUEBA && !esMovil) window.location.href = mailto;
+    $('pasoTitulo').textContent = esMovil ? 'Último paso: abre tu correo y pulsa «Enviar»' : 'Último paso: elige tu correo y pulsa «Enviar»';
   }
 
-  $('copiarSolicitud').addEventListener('click', function () {
-    var ta = $('textoSolicitud');
-    function ok() { $('copiado').textContent = 'Copiado. Pégalo en un email nuevo.'; }
-    function manual() { ta.focus(); ta.select(); try { if (document.execCommand('copy')) return ok(); } catch (e) {} $('copiado').textContent = 'Pulsa Ctrl+C para copiar.'; }
-    try { navigator.clipboard.writeText(ta.value).then(ok, manual); } catch (e) { manual(); }
+  // Copiar cada parte del email
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-copia]');
+    if (!b) return;
+    var el = $(b.getAttribute('data-copia')), texto = el.textContent;
+    function ok() { b.textContent = 'Copiado ✓'; setTimeout(function () { b.textContent = 'Copiar'; }, 1800); }
+    function manual() {
+      var r = document.createRange(); r.selectNodeContents(el);
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      try { if (document.execCommand('copy')) return ok(); } catch (e) {}
+      b.textContent = 'Selecciona y copia';
+    }
+    try { navigator.clipboard.writeText(texto).then(ok, manual); } catch (e) { manual(); }
   });
 
   // ---------- Hacer otra solicitud (sin recargar la página) ----------
   function nuevaSolicitud() {
     $('form').reset();
-    document.querySelector('.manual').open = false;
-    $('copiado').textContent = '';
+    $('manual').open = false;
     $('horaBox').hidden = true;
     $('lentes').innerHTML = '';
     nuevaLente();

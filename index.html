@@ -130,7 +130,7 @@
   .codigo{border:2px dashed var(--turquesa);background:var(--turquesa-suave);border-radius:16px;padding:16px 18px;margin:18px auto;max-width:440px}
   .codigo small{text-transform:uppercase;letter-spacing:.1em;font-weight:700;font-size:12px;color:var(--petroleo)}
   .codigo p{margin:0;color:var(--petroleo)}
-  .ok .ref{font-family:var(--mono);font-size:30px;letter-spacing:.06em;color:var(--petroleo);font-weight:500;margin:4px 0 8px}
+  .ok .ref{white-space:nowrap;font-family:var(--mono);font-size:clamp(20px,6.4vw,30px);letter-spacing:.06em;color:var(--petroleo);font-weight:500;margin:4px 0 8px}
   .ok p{max-width:52ch;margin:6px auto}
   .aviso-prueba{background:#fff6dc;color:#7a5600;border-radius:10px;padding:10px 14px;font-size:13.5px;margin:16px auto 0;max-width:52ch}
 
@@ -138,6 +138,11 @@
   .ultimo-paso b{font-family:var(--f-titulo);font-size:19px;color:#fff}
   .ultimo-paso p{margin:0;font-size:14px}
   a.enviar{text-decoration:none}
+  .apps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+  @media (max-width:520px){.apps{grid-template-columns:1fr}}
+  .app{display:block;text-align:center;text-decoration:none;background:var(--turquesa);color:#063440;font-family:var(--f-titulo);font-weight:700;font-size:16px;padding:13px 10px;border-radius:12px}
+  .app:hover{background:#3fd0e8}
+  .app:focus-visible{outline:3px solid #fff;outline-offset:2px}
   .manual{max-width:560px;margin:14px auto 0;text-align:left;background:var(--turquesa-suave);border-radius:12px;padding:12px 16px}
   .manual summary{cursor:pointer;font-weight:700;color:var(--petroleo)}
   .manual p{margin:10px 0}
@@ -219,10 +224,13 @@
         <p><b>Escribe este código en la caja con las lentes a devolver.</b></p>
       </div>
       <div class="ultimo-paso">
-        <b>Último paso: pulsa «Enviar» en tu correo</b>
-        <p>Se ha abierto tu programa de correo con la solicitud ya escrita, dirigida a Biotech Healthcare. Al enviarla, recibirás una copia en <span id="emailCopia"></span> como confirmación.</p>
-        <a class="enviar" id="abrirMail" href="#">Abrir el email de nuevo
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h11M11 5l5 5-5 5"/></svg></a>
+        <b id="pasoTitulo">Último paso: envía el email</b>
+        <p id="pasoTexto">Elige con qué correo quieres enviarlo. Se abrirá con la solicitud ya escrita: solo tienes que pulsar «Enviar». Recibirás una copia en <span id="emailCopia"></span> como confirmación.</p>
+        <div class="apps">
+          <a class="app" id="abrirGmail" href="#" target="_blank" rel="noopener">Gmail</a>
+          <a class="app" id="abrirOutlook" href="#" target="_blank" rel="noopener">Outlook</a>
+          <a class="app" id="abrirMail" href="#">Otra app de correo</a>
+        </div>
       </div>
       <p id="resumen"></p>
       <details class="manual">
@@ -261,8 +269,7 @@
                                  'Eyecryl Toric', 'Eyecryl Plus', 'Eyecryl Plus Clear', 'Eyecryl Plus Natural HD'] },
     { grupo: 'Optiflex', lentes: ['Optiflex TRIO', 'Optiflex TRIO Toric', 'Optiflex TRIO Plus', 'Optiflex TRIO Comfort',
                                   'Optiflex XTENSE', 'Optiflex XTENSE Comfort Plus', 'Optiflex Genesis',
-                                  'Optiflex Genesis Comfort NY', 'Optiflex Genesis Comfort Plus'] },
-    { grupo: 'Otras', lentes: ['Bio Vision PMMA'] }
+                                  'Optiflex Genesis Comfort NY', 'Optiflex Genesis Comfort Plus'] }
   ];
   var MOTIVOS = ['Back-up', 'Cancelación de cirugía', 'Explante', 'Otro'];
   var FRANJAS = ['Mañana (9:00 – 14:00)', 'Tarde (15:00 – 19:00)'];
@@ -500,11 +507,25 @@
     $('resumen').textContent = 'Recogida solicitada para el ' + fechaTexto + ', ' + textoHorarioLargo(datos.franja) + '.';
     $('textoSolicitud').value = 'Asunto: ' + asunto + '\n\n' + cuerpo.replace(/\r\n/g, '\n');
     $('abrirMail').href = mailto;
+    // Gmail y Outlook: se abren en su app (móvil) o en la web (ordenador) con todo escrito
+    $('abrirGmail').href = 'https://mail.google.com/mail/?view=cm&fs=1' +
+      '&to=' + encodeURIComponent(EMAILS_PARA.join(',')) +
+      '&cc=' + encodeURIComponent(copias) +
+      '&su=' + encodeURIComponent(asunto) +
+      '&body=' + encodeURIComponent(cuerpo);
+    $('abrirOutlook').href = 'https://outlook.office.com/mail/deeplink/compose' +
+      '?to=' + encodeURIComponent(EMAILS_PARA.join(',')) +
+      '&cc=' + encodeURIComponent(copias) +
+      '&subject=' + encodeURIComponent(asunto) +
+      '&body=' + encodeURIComponent(cuerpo);
     $('avisoPrueba').hidden = !MODO_PRUEBA;
     $('exito').hidden = false;
     window.scrollTo(0, 0);
 
-    if (!MODO_PRUEBA) window.location.href = mailto; // abre el correo con todo escrito
+    // En ordenador se abre directamente el programa de correo; en el móvil la clínica elige la app
+    var esMovil = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    $('pasoTitulo').textContent = esMovil ? 'Último paso: elige tu correo y envía' : 'Último paso: pulsa «Enviar» en tu correo';
+    if (!MODO_PRUEBA && !esMovil) window.location.href = mailto;
   }
 
   $('copiarSolicitud').addEventListener('click', function () {

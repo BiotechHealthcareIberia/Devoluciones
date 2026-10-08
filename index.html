@@ -243,13 +243,16 @@
   'use strict';
 
   // =================== CONFIGURACIÓN (puedes cambiarla) ===================
-  // Quién recibe las solicitudes de recogida
-  var EMAIL_DESTINO = 'ly.garcia@biotechhealthcare.com';
-  // Reciben copia (la clínica también recibe copia automáticamente como confirmación)
-  var EMAILS_COPIA = [
-    'phakic.iberia@biotechhealthcare.com',
+  // Para (destinatarios principales de la solicitud)
+  var EMAILS_PARA = [
     'pedidos.iberia@biotechhealthcare.com',
-    'vanessa.garcia@biotechhealthcare.com'
+    'phakic.iberia@biotechhealthcare.com'
+  ];
+  // Con copia (CC). La clínica también recibe copia automáticamente como confirmación.
+  var EMAILS_COPIA = [
+    'ana.montasell@biotechhealthcare.com',
+    'vanessa.garcia@biotechhealthcare.com',
+    'ly.garcia@biotechhealthcare.com'
   ];
   // Catálogo de lentes Biotech Healthcare (por familias)
   var CATALOGO = [
@@ -484,7 +487,7 @@
     var cuerpo = L.join('\r\n');
     var asunto = codigo + ' · Recogida de lentes · ' + datos.clinica + ' · ' + fechaTexto;
     var copias = EMAILS_COPIA.concat([datos.email]).join(',');
-    var mailto = 'mailto:' + EMAIL_DESTINO +
+    var mailto = 'mailto:' + EMAILS_PARA.join(',') +
       '?cc=' + encodeURIComponent(copias) +
       '&subject=' + encodeURIComponent(asunto) +
       '&body=' + encodeURIComponent(cuerpo);
@@ -493,7 +496,7 @@
     $('form').hidden = true;
     $('ref').textContent = codigo;
     $('emailCopia').textContent = datos.email;
-    $('destinoTexto').textContent = EMAIL_DESTINO + (EMAILS_COPIA.length ? ' (copia a ' + EMAILS_COPIA.join(', ') + ')' : '');
+    $('destinoTexto').textContent = EMAILS_PARA.join(' y ') + (EMAILS_COPIA.length ? ', con copia a ' + EMAILS_COPIA.join(', ') : '');
     $('resumen').textContent = 'Recogida solicitada para el ' + fechaTexto + ', ' + textoHorarioLargo(datos.franja) + '.';
     $('textoSolicitud').value = 'Asunto: ' + asunto + '\n\n' + cuerpo.replace(/\r\n/g, '\n');
     $('abrirMail').href = mailto;

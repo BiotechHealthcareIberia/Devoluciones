@@ -1,0 +1,273 @@
+/**
+ * SOLICITUD DE RECOGIDA DE LENTES
+ * -------------------------------
+ * Formulario web (Google Apps Script) para que las clínicas soliciten la
+ * recogida de lentes. Al enviarlo:
+ *   1. Se genera automáticamente un código de devolución (ej. DEV-2026-0001).
+ *   2. Llega un email con todos los datos y el código al equipo interno (DESTINATARIOS).
+ *   3. Llega un email de confirmación con el código a la persona que lo solicita,
+ *      indicando que debe escribirlo en la caja con las lentes.
+ *   4. (Opcional) Se guarda una fila por lente en una hoja de Google Sheets.
+ *
+ * Solo hay que tocar el bloque CONFIGURACIÓN.
+ */
+
+// ===================== CONFIGURACIÓN =====================
+
+// Quién recibe cada solicitud
+const DESTINATARIOS = [
+  'phakic.iberia@biotechhealthcare.com',
+  'pedidos.iberia@biotechhealthcare.com',
+  'vanessa.garcia@biotechhealthcare.com',
+  'lygarcia@biotechhealthcare.com'
+];
+
+// Modelos que aparecen en el desplegable (se puede escribir otro con "Otra lente")
+const MODELOS = ['EyeCryl Phakic', 'EyeCryl Phakic Toric'];
+
+// Motivos de devolución del desplegable. "Otro" pide escribir el motivo.
+const MOTIVOS = ['Back-up', 'Cancelación de cirugía', 'Explante', 'Otro'];
+
+// Franjas horarias que puede elegir la clínica
+const FRANJAS = ['09:00 – 11:00', '11:00 – 13:00', '13:00 – 15:00', '15:00 – 17:00', '17:00 – 19:00'];
+
+// Prefijo del código de devolución: DEV-2026-0001, DEV-2026-0002…
+const PREFIJO_CODIGO = 'DEV';
+
+// Opcional: ID de una hoja de Google Sheets para guardar un registro de solicitudes.
+// Déjalo vacío ('') si no quieres registro. El ID es la parte larga de la URL de la hoja.
+const ID_HOJA_REGISTRO = '';
+
+// Nombre que verá la clínica como remitente
+const NOMBRE_REMITENTE = 'Biotech Healthcare Iberia · Lentes Phakic';
+
+// =========================================================
+
+
+/** Muestra el formulario. */
+function doGet() {
+  const t = HtmlService.createTemplateFromFile('Index');
+  t.modelos = MODELOS;
+  t.motivos = MOTIVOS;
+  t.franjas = FRANJAS;
+  return t.evaluate()
+    .setTitle('Solicitud de recogida de lentes · Biotech')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/** Recibe la solicitud desde el formulario, la valida y envía los emails. */
+function enviarSolicitud(d) {
+  // ---- Validación en servidor (por si alguien se salta la del navegador) ----
+  const txt = v => String(v == null ? '' : v).trim();
+  const datos = {
+    clinica:   txt(d.clinica),
+    direccion: txt(d.direccion),
+    contacto:  txt(d.contacto),
+    email:     txt(d.email),
+    fecha:     txt(d.fecha),
+    franja:    txt(d.franja),
+    notas:     txt(d.notas),
+    lentes:    (d.lentes || []).map(l => ({
+      modelo:   txt(l.modelo),
+      serie:    txt(l.serie),
+      paciente: txt(l.paciente),
+      motivo:   txt(l.motivo),
+      motivoOtro: txt(l.motivoOtro)
+    })).filter(l => l.modelo || l.serie || l.paciente)
+  };
+
+  const faltan = [];
+  if (!datos.clinica)   faltan.push('nombre de la clínica');
+  if (!datos.direccion) faltan.push('dirección de recogida');
+  if (!datos.contacto)  faltan.push('persona de contacto');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email)) faltan.push('un email válido');
+  if (!datos.fecha)     faltan.push('día de recogida');
+  if (FRANJAS.indexOf(datos.franja) === -1) faltan.push('horario de recogida');
+  if (!datos.lentes.length) faltan.push('al menos una lente');
+  datos.lentes.forEach((l, i) => {
+    if (!l.modelo || !l.serie || !l.paciente) faltan.push('todos los datos de la lente ' + (i + 1));
+    if (MOTIVOS.indexOf(l.motivo) === -1) faltan.push('motivo de devolución de la lente ' + (i + 1));
+    if (l.motivo === 'Otro' && !l.motivoOtro) faltan.push('explicar el motivo "Otro" de la lente ' + (i + 1));
+    l.motivoTexto = l.motivo === 'Otro' ? 'Otro: ' + l.motivoOtro : l.motivo;
+  });
+  if (faltan.length) throw new Error('Falta: ' + faltan.join(', ') + '.');
+
+  // Fecha: debe ser día laborable y a partir de mañana
+  const f = new Date(datos.fecha + 'T12:00:00');
+  const manana = new Date(); manana.setHours(0, 0, 0, 0); manana.setDate(manana.getDate() + 1);
+  if (isNaN(f) || f < manana) throw new Error('El día de recogida debe ser a partir de mañana.');
+  if (f.getDay() === 0 || f.getDay() === 6) throw new Error('Elige un día de lunes a viernes.');
+
+  // Nº de serie repetidos dentro de la misma solicitud
+  const vistos = {};
+  datos.lentes.forEach(l => {
+    const k = l.serie.toUpperCase();
+    if (vistos[k]) throw new Error('El nº de serie ' + l.serie + ' está repetido.');
+    vistos[k] = true;
+  });
+
+  // ---- Código de devolución automático y fecha legible ----
+  const ref = nuevoCodigo_();
+  datos.fechaTexto = fechaLarga_(f);
+
+  const logo = logoBlob_();
+  const imagenes = logo ? { logo: logo } : {};
+  datos.conLogo = !!logo;
+
+  // ---- Email interno (a todos los DESTINATARIOS) ----
+  MailApp.sendEmail({
+    to: DESTINATARIOS.join(','),
+    replyTo: datos.email,
+    name: NOMBRE_REMITENTE,
+    subject: `${ref} · Recogida de lentes · ${datos.clinica} · ${datos.fechaTexto} (${datos.franja})`,
+    htmlBody: plantillaEmail_(datos, ref, true),
+    inlineImages: imagenes,
+    body: plantillaTexto_(datos, ref)
+  });
+
+  // ---- Confirmación al solicitante ----
+  MailApp.sendEmail({
+    to: datos.email,
+    replyTo: DESTINATARIOS[0],
+    name: NOMBRE_REMITENTE,
+    subject: `Recogida solicitada · Código de devolución ${ref}`,
+    htmlBody: plantillaEmail_(datos, ref, false),
+    inlineImages: imagenes,
+    body: 'Tu solicitud de recogida se ha registrado correctamente.\n' +
+          'IMPORTANTE: escribe el código ' + ref + ' en la caja con las lentes a devolver.\n\n' +
+          plantillaTexto_(datos, ref)
+  });
+
+  // ---- Registro opcional en Google Sheets ----
+  if (ID_HOJA_REGISTRO) {
+    try {
+      const hoja = SpreadsheetApp.openById(ID_HOJA_REGISTRO).getSheets()[0];
+      if (hoja.getLastRow() === 0) {
+        hoja.appendRow(['Código devolución', 'Fecha solicitud', 'Clínica', 'Dirección', 'Contacto', 'Email',
+                        'Día recogida', 'Horario', 'Lente', 'Nº serie', 'Paciente', 'Motivo', 'Observaciones']);
+      }
+      datos.lentes.forEach(l => hoja.appendRow([
+        ref, new Date(), datos.clinica, datos.direccion, datos.contacto, datos.email,
+        datos.fecha, datos.franja, l.modelo, "'" + l.serie, l.paciente, l.motivoTexto, datos.notas
+      ]));
+    } catch (e) {
+      console.error('No se pudo guardar en la hoja: ' + e);
+    }
+  }
+
+  return { ref: ref, email: datos.email, fecha: datos.fechaTexto, franja: datos.franja };
+}
+
+
+/** Genera el siguiente código de devolución: DEV-2026-0001, DEV-2026-0002… (se reinicia cada año). */
+function nuevoCodigo_() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000); // evita que dos solicitudes simultáneas reciban el mismo número
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const anio = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Europe/Madrid', 'yyyy');
+    const clave = 'contador_' + anio;
+    const n = Number(props.getProperty(clave) || 0) + 1;
+    props.setProperty(clave, String(n));
+    return `${PREFIJO_CODIGO}-${anio}-${String(n).padStart(4, '0')}`;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+// ===================== Plantillas de email =====================
+
+/** Saca el logo incrustado en Index.html para usarlo también en los emails. */
+function logoBlob_() {
+  try {
+    const html = HtmlService.createHtmlOutputFromFile('Index').getContent();
+    const m = html.match(/data:image\/png;base64,([A-Za-z0-9+\/=]+)/);
+    if (m) return Utilities.newBlob(Utilities.base64Decode(m[1]), 'image/png', 'logo-biotech.png');
+  } catch (e) { console.error('Sin logo: ' + e); }
+  return null;
+}
+
+function fechaLarga_(f) {
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+                 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return `${dias[f.getDay()]} ${f.getDate()} de ${meses[f.getMonth()]} de ${f.getFullYear()}`;
+}
+
+function esc_(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function plantillaEmail_(d, ref, interno) {
+  const celda = 'padding:8px 10px;border-bottom:1px solid #d3e8ed';
+  const filas = d.lentes.map((l, i) => `
+    <tr>
+      <td style="${celda};color:#5d7c86">${i + 1}</td>
+      <td style="${celda}"><b>${esc_(l.modelo)}</b></td>
+      <td style="${celda};font-family:Consolas,monospace">${esc_(l.serie)}</td>
+      <td style="${celda}">${esc_(l.paciente)}</td>
+      <td style="${celda}">${esc_(l.motivoTexto)}</td>
+    </tr>`).join('');
+
+  const intro = interno
+    ? `<p style="margin:0 0 16px">Nueva solicitud de recogida de lentes. Puedes responder a este email para contactar directamente con la clínica.</p>`
+    : `<p style="margin:0 0 12px">Hola ${esc_(d.contacto)},</p>
+       <p style="margin:0 0 16px"><b>Tu solicitud de recogida se ha registrado con éxito.</b> Estos son los datos que nos has enviado. Si algo no es correcto, responde a este email indicando el código de devolución.</p>`;
+
+  const aviso = `
+    <div style="border:2px dashed #1fc0dc;background:#e3f7fa;border-radius:10px;padding:14px 16px;margin:0 0 18px;text-align:center">
+      <div style="font-size:12px;color:#1d4b5a;text-transform:uppercase;letter-spacing:1px;font-weight:bold">Código de devolución</div>
+      <div style="font-size:28px;font-weight:bold;letter-spacing:2px;color:#1d4b5a;font-family:Consolas,monospace;margin:4px 0">${ref}</div>
+      <div style="font-size:13px;color:#1d4b5a">${interno
+        ? 'La clínica debe escribir este código en la caja con las lentes a devolver.'
+        : '<b>Escribe este código en la caja con las lentes a devolver.</b>'}</div>
+    </div>`;
+
+  const fila = (k, v) => `<tr><td style="padding:4px 12px 4px 0;color:#5d7c86;white-space:nowrap;vertical-align:top">${k}</td><td style="padding:4px 0">${v}</td></tr>`;
+
+  return `
+  <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#173f4b;max-width:640px">
+    ${d.conLogo ? '<img src="cid:logo" alt="Biotech" width="150" style="display:block;margin:0 0 14px">' : ''}
+    <div style="background:#1d4b5a;border-radius:12px 12px 0 0;padding:16px 20px;color:#ffffff">
+      <div style="font-size:12px;color:#8fe3f1;text-transform:uppercase;letter-spacing:1px">Solicitud de recogida de lentes</div>
+      <div style="font-size:20px;font-weight:bold">${esc_(d.clinica)}</div>
+    </div>
+    <div style="height:4px;background:#1fc0dc;margin-bottom:18px;border-radius:0 0 4px 4px"></div>
+    ${intro}
+    ${aviso}
+    <table style="border-collapse:collapse;margin-bottom:18px">
+      ${fila('Clínica', '<b>' + esc_(d.clinica) + '</b>')}
+      ${fila('Dirección de recogida', esc_(d.direccion).replace(/\n/g, '<br>'))}
+      ${fila('Día de recogida', '<b>' + esc_(d.fechaTexto) + '</b>')}
+      ${fila('Horario', '<b>' + esc_(d.franja) + '</b>')}
+      ${fila('Contacto', esc_(d.contacto) + '<br>' + esc_(d.email))}
+      ${d.notas ? fila('Observaciones', esc_(d.notas).replace(/\n/g, '<br>')) : ''}
+    </table>
+    <table style="border-collapse:collapse;width:100%;font-size:14px">
+      <thead><tr style="background:#e3f7fa;color:#1d4b5a;text-align:left">
+        <th style="padding:8px 10px">#</th><th style="padding:8px 10px">Lente</th>
+        <th style="padding:8px 10px">Nº de serie</th><th style="padding:8px 10px">Paciente (según cálculo)</th>
+        <th style="padding:8px 10px">Motivo</th>
+      </tr></thead>
+      <tbody>${filas}</tbody>
+    </table>
+    <p style="margin-top:18px;color:#5d7c86;font-size:12px">Total: ${d.lentes.length} lente${d.lentes.length > 1 ? 's' : ''}.</p>
+  </div>`;
+}
+
+function plantillaTexto_(d, ref) {
+  return [
+    'Código de devolución: ' + ref,
+    'Clínica: ' + d.clinica,
+    'Dirección de recogida: ' + d.direccion,
+    'Día de recogida: ' + d.fechaTexto,
+    'Horario: ' + d.franja,
+    'Contacto: ' + d.contacto + ' · ' + d.email,
+    d.notas ? 'Observaciones: ' + d.notas : '',
+    '',
+    'Lentes:',
+    ...d.lentes.map((l, i) => `${i + 1}. ${l.modelo} · Nº serie ${l.serie} · ${l.paciente} · Motivo: ${l.motivoTexto}`)
+  ].join('\n');
+}

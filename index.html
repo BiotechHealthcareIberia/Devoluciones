@@ -256,14 +256,20 @@
   'use strict';
 
   // =================== CONFIGURACIÓN (puedes cambiarla) ===================
+  // Código de cliente de Biotech en MRW (aparece en el email). Cambia 'xxx' por el código real.
+  var CODIGO_CLIENTE_MRW = 'xxx';
+  // Email de MRW. Cuando lo tengas, escríbelo entre las comillas (ej. 'recogidas@mrw.es').
+  // Mientras esté vacío, no se añade.
+  var EMAIL_MRW = '';
   // Para (destinatarios principales de la solicitud)
   var EMAILS_PARA = [
-    'pedidos.iberia@biotechhealthcare.com',
-    'phakic.iberia@biotechhealthcare.com'
-  ];
+    'phakic.iberia@biotechhealthcare.com',
+    'pedidos.iberia@biotechhealthcare.com'
+  ].concat(EMAIL_MRW ? [EMAIL_MRW] : []);
   // Con copia (CC). La clínica también recibe copia automáticamente como confirmación.
   var EMAILS_COPIA = [
     'ana.montasell@biotechhealthcare.com',
+    'gonzalo.andrio@biotechhealthcare.com',
     'vanessa.garcia@biotechhealthcare.com',
     'ly.garcia@biotechhealthcare.com'
   ];
@@ -273,7 +279,7 @@
     { grupo: 'Eyecryl', lentes: ['Eyecryl SERT', 'Eyecryl SERT Toric', 'Eyecryl ACTV', 'Eyecryl ACTV Toric',
                                  'Eyecryl Toric', 'Eyecryl Plus', 'Eyecryl Plus Clear', 'Eyecryl Plus Natural HD'] },
     { grupo: 'Optiflex', lentes: ['Optiflex TRIO', 'Optiflex TRIO Toric', 'Optiflex TRIO Plus', 'Optiflex TRIO Comfort',
-                                  'Optiflex XTENSE', 'Optiflex XTENSE Comfort Plus', 'Optiflex Genesis',
+                                  'Optiflex XTENSE Comfort Plus', 'Optiflex XTENSE Comfort Plus Toric', 'Optiflex Genesis',
                                   'Optiflex Genesis Comfort NY', 'Optiflex Genesis Comfort Plus'] }
   ];
   var MOTIVOS = ['Back-up', 'Cancelación de cirugía', 'Explante', 'Otro'];
@@ -474,6 +480,8 @@
     L.push('');
     L.push('CÓDIGO DE DEVOLUCIÓN: ' + codigo);
     L.push('(Escribir este código en la caja con las lentes a devolver)');
+    L.push('');
+    L.push('CÓDIGO DE CLIENTE MRW (BIOTECH): ' + CODIGO_CLIENTE_MRW);
     L.push('');
     L.push('DATOS DE LA CLÍNICA');
     L.push('- Clínica: ' + datos.clinica);

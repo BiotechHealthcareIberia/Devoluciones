@@ -265,11 +265,6 @@
         <b id="pasoTitulo">Último paso: envía el email</b>
         <p>Se abrirá tu correo con los destinatarios, el asunto y la solicitud ya escritos: solo tienes que pulsar «Enviar». Recibirás una copia en <span id="emailCopia"></span> como confirmación.</p>
         <div class="apps" id="apps"></div>
-        <div class="cc-check">
-          <p><b>Antes de enviar, revisa el campo CC.</b> Algunas apps (sobre todo Outlook) no rellenan las copias. Si está vacío, pulsa este botón y pégalo en <b>CC</b>:</p>
-          <button type="button" class="app" data-copia="cpCC" id="copiarCC">Copiar emails de CC</button>
-          <p class="cc-lista" id="ccLista"></p>
-        </div>
         <p class="aviso-app" id="avisoApp" hidden>Parece que has abierto esta página dentro de otra app. Si el correo no se abre, ábrela en <b>Chrome</b> o <b>Safari</b> (menú ⋮ o ··· → «Abrir en el navegador»).</p>
       </div>
       <p id="resumen"></p>
@@ -277,7 +272,6 @@
         <summary>¿No se rellena el email? Cópialo y pégalo en tu correo</summary>
         <p>Abre un email nuevo en tu correo y copia cada parte en su sitio:</p>
         <div class="campo-copia"><span>Para</span><code id="cpPara"></code><button type="button" data-copia="cpPara">Copiar</button></div>
-        <div class="campo-copia"><span>CC</span><code id="cpCC"></code><button type="button" data-copia="cpCC">Copiar</button></div>
         <div class="campo-copia"><span>Asunto</span><code id="cpAsunto"></code><button type="button" data-copia="cpAsunto">Copiar</button></div>
         <div class="campo-copia"><span>Mensaje</span><code id="cpMensaje" class="largo"></code><button type="button" data-copia="cpMensaje">Copiar</button></div>
       </details>
@@ -557,9 +551,10 @@
       return EMAILS_PARA.every(function (p) { return p.toLowerCase() !== k; }) &&
              arr.findIndex(function (x) { return x.toLowerCase() === k; }) === i; // sin repetidos
     }).join(',');
-    var mailto = 'mailto:' + EMAILS_PARA.join(',') +
-      '?cc=' + encodeURIComponent(copias) +
-      '&subject=' + encodeURIComponent(asunto) +
+    // Cuando la clínica envía desde su correo, TODOS van en "Para" (Outlook ignora el CC de estos enlaces)
+    var todos = EMAILS_PARA.concat(copias ? copias.split(',') : []).join(',');
+    var mailto = 'mailto:' + todos +
+      '?subject=' + encodeURIComponent(asunto) +
       '&body=' + encodeURIComponent(cuerpo);
 
     function mostrarManual(fallo) {
@@ -567,7 +562,7 @@
     $('ref').textContent = codigo;
     $('emailCopia').textContent = datos.email;
     $('resumen').textContent = 'Recogida solicitada para el ' + fechaTexto + ', ' + textoHorarioLargo(datos.franja) + '.';
-    var para = EMAILS_PARA.join(',');
+    var para = todos;
     var enc = encodeURIComponent;
     var ua = navigator.userAgent || '';
     var esIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -578,15 +573,15 @@
     var opciones = [];
     if (esIOS) {
       // Esquemas propios de cada app: rellenan Para, CC, Asunto y Mensaje
-      opciones.push(['Gmail', 'googlegmail://co?to=' + enc(para) + '&cc=' + enc(copias) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
-      opciones.push(['Outlook', 'ms-outlook://compose?to=' + enc(para) + '&cc=' + enc(copias) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Gmail', 'googlegmail://co?to=' + enc(para) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Outlook', 'ms-outlook://compose?to=' + enc(para) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
       opciones.push(['Mail u otra app', mailto]);
     } else if (esAndroid) {
       // Android: el enlace estándar abre el selector (Gmail, Outlook…) con todo relleno
       opciones.push(['Abrir mi correo (Gmail, Outlook…)', mailto]);
     } else {
-      opciones.push(['Gmail', 'https://mail.google.com/mail/?view=cm&fs=1&to=' + enc(para) + '&cc=' + enc(copias) + '&su=' + enc(asunto) + '&body=' + enc(cuerpo)]);
-      opciones.push(['Outlook', 'https://outlook.office.com/mail/deeplink/compose?to=' + enc(para) + '&cc=' + enc(copias) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Gmail', 'https://mail.google.com/mail/?view=cm&fs=1&to=' + enc(para) + '&su=' + enc(asunto) + '&body=' + enc(cuerpo)]);
+      opciones.push(['Outlook', 'https://outlook.office.com/mail/deeplink/compose?to=' + enc(para) + '&subject=' + enc(asunto) + '&body=' + enc(cuerpo)]);
       opciones.push(['Programa de correo', mailto]);
     }
     $('apps').innerHTML = '';
@@ -599,9 +594,7 @@
     $('avisoApp').hidden = !enOtraApp;
 
     // Partes para copiar a mano
-    $('cpPara').textContent = EMAILS_PARA.join(', ');
-    $('cpCC').textContent = copias.split(',').join(', ');
-    $('ccLista').textContent = copias.split(',').join(', ');
+    $('cpPara').textContent = todos.split(',').join(', ');
     $('cpAsunto').textContent = asunto;
     $('cpMensaje').textContent = cuerpo.replace(/\r\n/g, '\n');
     $('avisoPrueba').hidden = !MODO_PRUEBA;

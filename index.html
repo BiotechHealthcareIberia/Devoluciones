@@ -157,6 +157,11 @@
   .ultimo-paso{background:var(--petroleo);color:#e6f8fb;border-radius:16px;padding:18px;margin:18px auto;max-width:520px;display:flex;flex-direction:column;gap:10px;align-items:center}
   .ultimo-paso b{font-family:var(--f-titulo);font-size:19px;color:#fff}
   .ultimo-paso p{margin:0;font-size:14px}
+  .cc-check{width:100%;border-top:1px solid rgba(255,255,255,.25);padding-top:12px;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .cc-check p{margin:0;font-size:13.5px}
+  .cc-check p b{font-size:inherit;font-family:inherit}
+  .cc-check .app{border:none;cursor:pointer;width:100%;max-width:320px;background:#fff;color:#1d4b5a}
+  .cc-lista{font-family:var(--mono);font-size:12px !important;color:#bfe9f1;overflow-wrap:anywhere}
   .enviado-ok{max-width:520px;margin:6px auto 0}
   .enviado-ok p{margin:0}
   #avisoEnvio{max-width:520px;margin:14px auto 0}
@@ -260,6 +265,11 @@
         <b id="pasoTitulo">Último paso: envía el email</b>
         <p>Se abrirá tu correo con los destinatarios, el asunto y la solicitud ya escritos: solo tienes que pulsar «Enviar». Recibirás una copia en <span id="emailCopia"></span> como confirmación.</p>
         <div class="apps" id="apps"></div>
+        <div class="cc-check">
+          <p><b>Antes de enviar, revisa el campo CC.</b> Algunas apps (sobre todo Outlook) no rellenan las copias. Si está vacío, pulsa este botón y pégalo en <b>CC</b>:</p>
+          <button type="button" class="app" data-copia="cpCC" id="copiarCC">Copiar emails de CC</button>
+          <p class="cc-lista" id="ccLista"></p>
+        </div>
         <p class="aviso-app" id="avisoApp" hidden>Parece que has abierto esta página dentro de otra app. Si el correo no se abre, ábrela en <b>Chrome</b> o <b>Safari</b> (menú ⋮ o ··· → «Abrir en el navegador»).</p>
       </div>
       <p id="resumen"></p>
@@ -542,7 +552,11 @@
     L.push('Enviado desde el formulario de recogida de lentes de Biotech Healthcare Iberia.');
     var cuerpo = L.join('\r\n');
     var asunto = codigo + ' · Recogida de lentes · ' + datos.clinica + ' · ' + fechaTexto;
-    var copias = EMAILS_COPIA.concat(COPIA_A_CLIENTE ? [datos.email] : []).join(',');
+    var copias = EMAILS_COPIA.concat(COPIA_A_CLIENTE ? [datos.email] : []).filter(function (e, i, arr) {
+      var k = e.toLowerCase();
+      return EMAILS_PARA.every(function (p) { return p.toLowerCase() !== k; }) &&
+             arr.findIndex(function (x) { return x.toLowerCase() === k; }) === i; // sin repetidos
+    }).join(',');
     var mailto = 'mailto:' + EMAILS_PARA.join(',') +
       '?cc=' + encodeURIComponent(copias) +
       '&subject=' + encodeURIComponent(asunto) +
@@ -587,6 +601,7 @@
     // Partes para copiar a mano
     $('cpPara').textContent = EMAILS_PARA.join(', ');
     $('cpCC').textContent = copias.split(',').join(', ');
+    $('ccLista').textContent = copias.split(',').join(', ');
     $('cpAsunto').textContent = asunto;
     $('cpMensaje').textContent = cuerpo.replace(/\r\n/g, '\n');
     $('avisoPrueba').hidden = !MODO_PRUEBA;
@@ -700,7 +715,8 @@
     var b = ev.target.closest && ev.target.closest('[data-copia]');
     if (!b) return;
     var el = $(b.getAttribute('data-copia')), texto = el.textContent;
-    function ok() { b.textContent = 'Copiado ✓'; setTimeout(function () { b.textContent = 'Copiar'; }, 1800); }
+    var etiqueta = b.textContent;
+    function ok() { b.textContent = 'Copiado ✓'; setTimeout(function () { b.textContent = etiqueta; }, 1800); }
     function manual() {
       var r = document.createRange(); r.selectNodeContents(el);
       var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);

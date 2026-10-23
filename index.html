@@ -157,6 +157,9 @@
   .ultimo-paso{background:var(--petroleo);color:#e6f8fb;border-radius:16px;padding:18px;margin:18px auto;max-width:520px;display:flex;flex-direction:column;gap:10px;align-items:center}
   .ultimo-paso b{font-family:var(--f-titulo);font-size:19px;color:#fff}
   .ultimo-paso p{margin:0;font-size:14px}
+  .enviado-ok{max-width:520px;margin:6px auto 0}
+  .enviado-ok p{margin:0}
+  #avisoEnvio{max-width:520px;margin:14px auto 0}
   a.enviar{text-decoration:none}
   .apps{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;width:100%}
   .aviso-app{background:#fff6dc;color:#7a5600;border-radius:10px;padding:10px 12px;font-size:13.5px}
@@ -234,7 +237,7 @@
       <div id="error" class="msg-error" role="alert" hidden></div>
 
       <div class="pie">
-        <p>Al pulsar se genera tu código de devolución y se abre tu correo con la solicitud ya escrita: solo tendrás que pulsar «Enviar».</p>
+        <p id="textoPie">Al pulsar se genera tu código de devolución y la solicitud se envía automáticamente a Biotech Healthcare.</p>
         <button type="submit" class="enviar" id="enviar">Solicitar recogida
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10h11M11 5l5 5-5 5"/></svg>
         </button>
@@ -243,20 +246,24 @@
 
     <div id="exito" class="ok" hidden>
       <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l8 6 8-6M4 7v10h16V7"/></svg></div>
-      <h2>Tu solicitud está lista</h2>
+      <h2 id="tituloExito">Recogida solicitada con éxito</h2>
       <div class="codigo">
         <small>Código de devolución</small>
         <div class="ref" id="ref"></div>
         <p><b>Escribe este código en la caja con las lentes a devolver.</b></p>
       </div>
-      <div class="ultimo-paso">
+      <div class="enviado-ok" id="enviadoOk" hidden>
+        <p><b>Hemos recibido tu solicitud.</b> El equipo de Biotech Healthcare organizará la recogida y te enviamos una copia a <span id="emailCopiaOk"></span>.</p>
+      </div>
+      <p class="aviso-app" id="avisoEnvio" hidden>No se ha podido enviar automáticamente. Envíala tú desde tu correo con los botones de abajo: ya está todo escrito.</p>
+      <div class="ultimo-paso" id="pasoManual">
         <b id="pasoTitulo">Último paso: envía el email</b>
         <p>Se abrirá tu correo con los destinatarios, el asunto y la solicitud ya escritos: solo tienes que pulsar «Enviar». Recibirás una copia en <span id="emailCopia"></span> como confirmación.</p>
         <div class="apps" id="apps"></div>
         <p class="aviso-app" id="avisoApp" hidden>Parece que has abierto esta página dentro de otra app. Si el correo no se abre, ábrela en <b>Chrome</b> o <b>Safari</b> (menú ⋮ o ··· → «Abrir en el navegador»).</p>
       </div>
       <p id="resumen"></p>
-      <details class="manual" id="manual">
+      <details class="manual" id="manual" hidden>
         <summary>¿No se rellena el email? Cópialo y pégalo en tu correo</summary>
         <p>Abre un email nuevo en tu correo y copia cada parte en su sitio:</p>
         <div class="campo-copia"><span>Para</span><code id="cpPara"></code><button type="button" data-copia="cpPara">Copiar</button></div>
@@ -293,6 +300,15 @@
     'vanessa.garcia@biotechhealthcare.com',
     'ly.garcia@biotechhealthcare.com'
   ];
+  // La clínica también recibe una copia del email como confirmación (true = sí, false = no)
+  var COPIA_A_CLIENTE = true;
+
+  // ENVÍO AUTOMÁTICO (EmailJS). Pega aquí los 3 datos de tu cuenta de EmailJS.
+  // Mientras estén vacíos, el formulario abre el correo de la clínica para que lo envíe ella.
+  var EMAILJS_PUBLIC_KEY = '';   // Account → General → Public Key
+  var EMAILJS_SERVICE_ID = '';   // Email Services → Service ID (ej. service_abc123)
+  var EMAILJS_TEMPLATE_ID = '';  // Email Templates → Template ID (ej. template_xyz789)
+
   // Catálogo de lentes Biotech Healthcare (por familias)
   var CATALOGO = [
     { grupo: 'Lentes fáquicas', lentes: ['Eyecryl Phakic', 'Eyecryl Phakic Toric'] },
@@ -526,13 +542,13 @@
     L.push('Enviado desde el formulario de recogida de lentes de Biotech Healthcare Iberia.');
     var cuerpo = L.join('\r\n');
     var asunto = codigo + ' · Recogida de lentes · ' + datos.clinica + ' · ' + fechaTexto;
-    var copias = EMAILS_COPIA.concat([datos.email]).join(',');
+    var copias = EMAILS_COPIA.concat(COPIA_A_CLIENTE ? [datos.email] : []).join(',');
     var mailto = 'mailto:' + EMAILS_PARA.join(',') +
       '?cc=' + encodeURIComponent(copias) +
       '&subject=' + encodeURIComponent(asunto) +
       '&body=' + encodeURIComponent(cuerpo);
 
-    // Pantalla de "último paso"
+    function mostrarManual(fallo) {
     $('form').hidden = true;
     $('ref').textContent = codigo;
     $('emailCopia').textContent = datos.email;
@@ -578,7 +594,106 @@
     window.scrollTo(0, 0);
 
     $('pasoTitulo').textContent = esMovil ? 'Último paso: abre tu correo y pulsa «Enviar»' : 'Último paso: elige tu correo y pulsa «Enviar»';
+    $('tituloExito').textContent = 'Tu solicitud está lista';
+    $('enviadoOk').hidden = true;
+    $('avisoEnvio').hidden = !fallo;
+    $('pasoManual').hidden = false;
+    $('manual').hidden = false;
+    }
+
+    function mostrarEnviado() {
+      $('form').hidden = true;
+      $('ref').textContent = codigo;
+      $('tituloExito').textContent = 'Recogida solicitada con éxito';
+      $('emailCopiaOk').textContent = datos.email;
+      $('enviadoOk').hidden = false;
+      $('avisoEnvio').hidden = true;
+      $('pasoManual').hidden = true;
+      $('manual').hidden = true;
+      $('resumen').textContent = 'Recogida solicitada para el ' + fechaTexto + ', ' + textoHorarioLargo(datos.franja) + '.';
+      $('avisoPrueba').hidden = !MODO_PRUEBA;
+      $('exito').hidden = false;
+      window.scrollTo(0, 0);
+    }
+
+    if (!envioAutomaticoActivo()) return mostrarManual(false);
+    if (MODO_PRUEBA) return mostrarEnviado();
+
+    var btn = $('enviar');
+    btn.disabled = true;
+    btn.firstChild.textContent = 'Enviando… ';
+    fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: EMAILJS_SERVICE_ID,
+        template_id: EMAILJS_TEMPLATE_ID,
+        user_id: EMAILJS_PUBLIC_KEY,
+        template_params: {
+          para: EMAILS_PARA.join(','),
+          cc: copias,
+          reply_to: datos.email,
+          asunto: asunto,
+          codigo: codigo,
+          mensaje_html: emailHTML(datos, codigo, fechaTexto, horario),
+          mensaje_texto: cuerpo
+        }
+      })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      mostrarEnviado();
+    }).catch(function (e) {
+      if (window.console) console.warn('Envío automático fallido:', e);
+      mostrarManual(true);
+    });
   }
+
+  function envioAutomaticoActivo() {
+    return !!(EMAILJS_PUBLIC_KEY && EMAILJS_SERVICE_ID && EMAILJS_TEMPLATE_ID);
+  }
+
+  // ---------- Email en HTML (ordenado y con el código destacado) ----------
+  function escH(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function emailHTML(d, codigo, fechaTexto, horario) {
+    var celda = 'padding:8px 10px;border-bottom:1px solid #d3e8ed;vertical-align:top';
+    var fila = function (k, v) { return '<tr><td style="padding:5px 14px 5px 0;color:#5d7c86;white-space:nowrap;vertical-align:top">' + k + '</td><td style="padding:5px 0">' + v + '</td></tr>'; };
+    var lentes = d.lentes.map(function (l, i) {
+      var motivo = l.motivo === 'Otro' ? 'Otro: ' + l.motivoOtro : l.motivo;
+      return '<tr><td style="' + celda + ';color:#5d7c86">' + (i + 1) + '</td><td style="' + celda + '"><b>' + escH(l.modelo) + '</b></td>' +
+        '<td style="' + celda + ';font-family:Consolas,monospace">' + escH(l.serie) + '</td><td style="' + celda + '">' + escH(l.paciente) + '</td>' +
+        '<td style="' + celda + '">' + escH(motivo) + '</td></tr>';
+    }).join('');
+    return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#173f4b;max-width:680px">' +
+      '<div style="background:#1d4b5a;border-radius:12px 12px 0 0;padding:16px 20px;color:#fff">' +
+        '<div style="font-size:12px;color:#8fe3f1;text-transform:uppercase;letter-spacing:1px">Solicitud de recogida de lentes</div>' +
+        '<div style="font-size:20px;font-weight:bold">' + escH(d.clinica) + '</div></div>' +
+      '<div style="height:4px;background:#1fc0dc;margin-bottom:18px"></div>' +
+      '<div style="border:2px dashed #1fc0dc;background:#e3f7fa;border-radius:10px;padding:14px 16px;margin:0 0 16px;text-align:center">' +
+        '<div style="font-size:12px;color:#1d4b5a;text-transform:uppercase;letter-spacing:1px;font-weight:bold">Código de devolución</div>' +
+        '<div style="font-size:28px;font-weight:bold;letter-spacing:2px;color:#1d4b5a;font-family:Consolas,monospace;margin:4px 0">' + escH(codigo) + '</div>' +
+        '<div style="font-size:13px;color:#1d4b5a">Escribir este código en la caja con las lentes a devolver.</div></div>' +
+      '<p style="margin:0 0 16px;font-size:15px"><b>Código de cliente MRW (Biotech):</b> ' + escH(CODIGO_CLIENTE_MRW) + '</p>' +
+      '<table style="border-collapse:collapse;margin-bottom:18px;font-size:14px">' +
+        fila('Clínica', '<b>' + escH(d.clinica) + '</b>') +
+        fila('Dirección de recogida', escH(d.direccion).replace(/\n/g, '<br>')) +
+        fila('Día de recogida', '<b>' + escH(fechaTexto) + '</b>') +
+        fila('Horario', '<b>' + escH(horario) + '</b>') +
+        fila('Persona de contacto', escH(d.contacto)) +
+        fila('Email', escH(d.email)) +
+        (d.notas ? fila('Observaciones', escH(d.notas).replace(/\n/g, '<br>')) : '') +
+      '</table>' +
+      '<table style="border-collapse:collapse;width:100%;font-size:14px">' +
+        '<tr style="background:#e3f7fa;color:#1d4b5a;text-align:left"><th style="padding:8px 10px">#</th><th style="padding:8px 10px">Lente</th>' +
+        '<th style="padding:8px 10px">Nº de serie</th><th style="padding:8px 10px">Paciente (según cálculo)</th><th style="padding:8px 10px">Motivo</th></tr>' +
+        lentes + '</table>' +
+      '<p style="margin-top:18px;color:#5d7c86;font-size:12px">Total: ' + d.lentes.length + (d.lentes.length > 1 ? ' lentes' : ' lente') +
+        '. Enviado desde el formulario de devolución de lentes de Biotech Healthcare Iberia.</p></div>';
+  }
+
+  if (!envioAutomaticoActivo()) {
+    $('textoPie').textContent = 'Al pulsar se genera tu código de devolución y se abre tu correo con la solicitud ya escrita: solo tendrás que pulsar «Enviar».';
+  }
+
 
   // Copiar cada parte del email
   document.addEventListener('click', function (ev) {
@@ -608,6 +723,7 @@
     btn.disabled = false;
     btn.firstChild.textContent = 'Solicitar recogida ';
     $('exito').hidden = true;
+    $('avisoEnvio').hidden = true;
     $('form').hidden = false;
     window.scrollTo(0, 0);
     $('clinica').focus();
